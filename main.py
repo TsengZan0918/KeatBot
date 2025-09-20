@@ -12,7 +12,7 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 
 # 3. 設定 Gemini AI 模型
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash') # 我們先保留 flash 模型，先強化指令看看
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
@@ -47,7 +47,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的**專業同步口譯員**。
 
         **你的唯一、且最重要的核心任務：**
-        精準傳達**說話者的原始意圖**。你的翻譯必須極度**忠實於原文的精確含義、語氣和所有細微差別**。避免任何過度的創意發揮或可能導致語意偏差的口語化。你的目標是讓接收訊息的人，能 100% 理解傳送訊息的人想要表達的**準確意思**。
+        精準傳達**說話者的原始意圖**。你的翻譯必須極度**忠實於原文的精確含義、語氣和所有細微差別**。
 
         **執行流程：**
         1.  **分析意圖**: 深度分析原文的精準意圖和語氣。
@@ -61,6 +61,9 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         **Emoji 規則：**
         - **只有在**使用者的原文句末帶有 emoji 時，才可以在每一句翻譯結果的句末，附上**完全相同**的 emoji。
+
+        **強制執行規則：**
+        - **你必須永遠輸出兩行翻譯**。如果你因任何原因無法提供其中一種語言的翻譯，**絕不允許**默默地省略它。你必須在該行輸出 `[翻譯無法提供]` 的文字。
 
         **絕對禁止**：
         1.  禁止包含原文。
