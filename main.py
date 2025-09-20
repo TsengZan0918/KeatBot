@@ -1,12 +1,12 @@
 # 1. 匯入所有需要的工具
 import os
-import google.generativai as genai
+import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from flask import Flask
 from threading import Thread
 
-# 2. 從 Replit 的 Secrets 功能讀取我們的祕密金鑰
+# 2. 從環境變數讀取我們的祕密金鑰
 TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
 GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 
@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 4. 建立一個小網站來讓 UptimeRobot 訪問，以保持機器人永遠在線
+# 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
 
 @app.route('/')
@@ -44,28 +44,28 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         # --- 這是我們給 AI 的核心指令 (Prompt)，決定了翻譯的品質和方向 ---
         prompt = f"""
-        你是一位高度智能的多語言翻譯引擎。你的首要任務是判斷使用者輸入句子（其中可能包含繁體中文、英文、高棉文的混合）的**主要語言或溝通意圖**。
+        你是一位精通繁體中文、英文、柬埔寨高棉文，且**極具文筆與文化敏感度**的本地化專家。
 
-        **核心任務：**
-        進行**風格轉換翻譯**。你必須**深度理解**原文的**語氣、風格、情境和情感**，然後用目標語言**最自然、最貼切的文筆**來**重現**這種感覺。
+        **你的唯一、且最重要的核心任務：**
+        進行**風格轉換翻譯**。你不僅要翻譯字面意思，更必須**深度理解**原文的**語氣、風格、情境和情感**（例如：可愛、俏皮、正式、專業、俚語、網路用語等），然後用目標語言**最自然、最貼切的文筆**來**重現**這種感覺。你的價值在於詞彙的選擇和句型的建構，而不僅是字面翻譯。
 
-        **特殊指令：**
-        對於非常簡短、口語化或可能模稜兩可的輸入（例如「好小喔」、「笑了」、「OK」），你必須**做出最合理的語言判斷**並**堅持完成翻譯任務**，而不是放棄或只回覆一種語言。
+        **執行流程：**
+        1.  **分析風格**: 深度分析原文的風格和意圖。
+        2.  **翻譯**: 根據分析，將其完整意思翻譯成另外兩種語言。
+        3.  **排序**: 嚴格遵守下面的排序規則。
 
-        **翻譯與排序規則如下：**
+        **翻譯與排序規則：**
         - 如果原文主要是**繁體中文**，回覆必須是**第一行高棉文**，**第二行英文**。
         - 如果原文主要是**高棉文**，回覆必須是**第一行繁體中文**，**第二行英文**。
         - 如果原文主要是**英文**，回覆必須是**第一行繁體中文**，**第二行高棉文**。
 
         **Emoji 規則：**
-        - **只有在**使用者的原文句末帶有 emoji 時，才可以在每一句翻譯結果的句末，附上**完全相同**的 emoji。不要自己創造或添加任何 emoji。
+        - 如果原文包含 emoji，可以在翻譯中保留它們以輔助語氣，但**傳達風格的主要方法必須是透過文字的「選詞」和「句法結構」**。
 
         **絕對禁止**：
         1.  禁止包含原文。
         2.  禁止包含任何語言標籤 (例如 "英文:")。
         3.  禁止任何除了翻譯文本和原文 emoji 之外的解釋或對話。
-
-        只需提供兩句翻譯好的句子，各佔一行，並嚴格遵守上述的所有規則。
 
         要翻譯的原文是："{user_text}"
         """
@@ -91,7 +91,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 # 7. 主程式：設定機器人並讓它開始運作
 def main() -> None:
-    """啟動機器人並開始監 Untersuchungen"""
+    """啟動機器人並開始監聽訊息"""
     print("機器人啟動中...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
