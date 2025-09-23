@@ -36,31 +36,23 @@ def keep_alive():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# 6. 輔助函式：判斷訊息是否應該跳過翻譯
+# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (極簡化偵錯版)
 def should_skip_translation(text: str) -> bool:
+    # 為了找出問題，我們暫時只判斷英文單詞，完全移除複雜的表情符號檢查
+    print(">>> 進入 should_skip_translation 函式")
     ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
-    if text.strip().lower() in ignored_words:
+    
+    text_to_check = text.strip().lower()
+    print(f">>> 準備檢查文字: '{text_to_check}'")
+
+    if text_to_check in ignored_words:
+        print(f">>> '{text_to_check}' 在忽略清單中，回傳 True (將會跳過)")
         return True
-    if not text or text.isspace():
-        return False
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001f900-\U0001f9ff"
-        "\u2600-\u26FF"
-        "\u2700-\u27BF"
-        "]+", flags=re.UNICODE)
-    text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
-    if not text_without_emojis_and_space:
-        return True
+    
+    print(f">>> '{text_to_check}' 不在忽略清單中，回傳 False (將會翻譯)")
     return False
 
-# 7. 核心功能：定義處理所有文字訊息的翻譯功能 (最終偵錯版)
+# 7. 核心功能：定義處理所有文字訊息的翻譯功能
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
     chat_id = update.message.chat_id
@@ -80,34 +72,26 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
-        # --- 修改部分：強化對 AI 的指令，加入明確範例 ---
         prompt = f"""
         你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的**專業同步口譯員**。
-
         **你的唯一、且最重要的核心任務：**
         精準傳達**說話者的原始意圖**。你的翻譯必須極度**忠實於原文的精確含義、語氣和所有細微差別**。
-
         **執行流程：**
         1.  **分析意圖**: 深度分析原文的精準意圖和語氣。
         2.  **精準翻譯**: 將其完整意思翻譯成另外兩種語言。
         3.  **排序**: 嚴格遵守下面的排序規則。
-
         **翻譯與排序規則：**
         - 如果原文主要是**繁體中文**，回覆必須是**第一行高棉文**，**第二行英文**。
         - 如果原文主要是**高棉文**，回覆必須是**第一行繁體中文**，**第二行英文**。
         - 如果原文主要是**英文**，回覆必須是**第一行繁體中文**，**第二行高棉文**。
-
         **Emoji 規則：**
         - **只有在**使用者的原文句末帶有 emoji 時，才可以在每一句翻譯結果的句末，附上**完全相同**的 emoji。
-
         **強制執行規則：**
         - **你必須永遠輸出兩行翻譯**。如果你因任何原因無法提供其中一種語言的翻譯，**絕不允許**默默地省略它。你必須在該行輸出 `[翻譯無法提供]` 的文字。
-
         **絕對禁止**：
         1.  禁止包含原文。
         2.  禁止包含任何語言標籤 (例如 "英文:")。
         3.  禁止任何除了翻譯文本和原文 emoji 之外的解釋或對話。
-
         ---
         **範例:**
         使用者輸入: "你好嗎？"
@@ -115,14 +99,11 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         អ្នកសុខសប្បាយទេ?
         How are you?
         ---
-
         要翻譯的原文是："{user_text}"
         """
 
         print("準備呼叫 Gemini API...")
         response = await model.generate_content_async(prompt)
-        
-        # 新增：印出 AI 回傳的原始內容，方便我們看到它到底回了什麼
         print(f"Gemini 原始回覆: '{response.text}'")
         
         await context.bot.edit_message_text(
@@ -150,7 +131,6 @@ def main() -> None:
     if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
         print("!!!!!!!!!!!!!! 啟動失敗 !!!!!!!!!!!!!!")
         print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
-        print("請檢查您的部署平台中的環境變數/Secrets設定。")
         return
         
     if not model:
