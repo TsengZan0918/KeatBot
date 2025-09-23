@@ -1,6 +1,6 @@
 # 1. 匯入所有需要的工具
 import os
-import re # <- 新增：匯入正規表示式工具
+import re
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -8,12 +8,13 @@ from flask import Flask
 from threading import Thread
 
 # 2. 從環境變數讀取我們的祕密金鑰
-TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
-GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
+# 請確保您在部署環境中已設定 TELEGRAM_BOT_TOKEN 和 GEMINI_API_KEY
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 # 3. 設定 Gemini AI 模型
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') # 我們先保留 flash 模型，先強化指令看看
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
@@ -34,13 +35,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """當使用者發送 /start 時，發送歡迎訊息"""
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# --- 新增的輔助函式 ---
+# 6. 輔助函式：判斷訊息是否應該跳過翻譯
 def should_skip_translation(text: str) -> bool:
     """
     判斷訊息是否應該被跳過，不進行翻譯。
     """
     # 建立一個不需翻譯的詞彙集合 (set)，查詢效能比 list 好
-    ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha","good"}
+    ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
 
     # 1. 檢查是否為被忽略的詞彙 (不分大小寫)
     if text.strip().lower() in ignored_words:
@@ -52,6 +53,7 @@ def should_skip_translation(text: str) -> bool:
         return False
 
     # Unicode emoji 的正規表示式模式
+    # 確保 '+' 符號在方括號 '[]' 的外面，這至關重要
     emoji_pattern = re.compile(
         "["
         "\U0001F600-\U0001F64F"  # emoticons
@@ -73,24 +75,22 @@ def should_skip_translation(text: str) -> bool:
         return True
 
     return False
-# --- 輔助函式結束 ---
 
 
-# 6. 定義處理所有文字訊息的核心翻譯功能
+# 7. 核心功能：定義處理所有文字訊息的翻譯功能
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """接收使用者的訊息，並使用 Gemini AI 進行三向翻譯"""
     user_text = update.message.text
     chat_id = update.message.chat_id
 
-    # --- 修改部分：在執行翻譯前先進行檢查 ---
+    # 在執行翻譯前先進行檢查
     if should_skip_translation(user_text):
         return  # 如果符合條件，函式就直接結束，不執行任何動作
-    # --- 修改結束 ---
 
     thinking_message = await context.bot.send_message(chat_id=chat_id, text='翻譯中，請稍候...')
 
     try:
-        # --- 這是我們給 AI 的核心指令 (Prompt)，決定了翻譯的品質和方向 ---
+        # --- 這是給 AI 的核心指令 (Prompt) ---
         prompt = f"""
         你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的**專業同步口譯員**。
 
@@ -140,9 +140,13 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             text='抱歉，翻譯時發生了一點問題，請稍後再試。'
         )
 
-# 7. 主程式：設定機器人並讓它開始運作
+# 8. 主程式：設定機器人並讓它開始運作
 def main() -> None:
     """啟動機器人並開始監聽訊息"""
+    if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
+        print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
+        return
+
     print("機器人啟動中...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -156,7 +160,7 @@ def main() -> None:
     # 開始運行機器人
     application.run_polling()
 
-# 8. 程式的進入點：先啟動小網站，再啟動機器人
+# 9. 程式的進入點：先啟動小網站，再啟動機器人
 if __name__ == '__main__':
-    keep_alive()  
+    keep_alive()
     main()
