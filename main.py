@@ -8,12 +8,10 @@ from flask import Flask
 from threading import Thread
 
 # 2. 從環境變數讀取我們的祕密金鑰
-# 請確保您在部署環境中已設定 TELEGRAM_BOT_TOKEN 和 GEMINI_API_KEY
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 # 3. 設定 Gemini AI 模型
-# 只有在金鑰存在時才設定
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -36,14 +34,10 @@ def keep_alive():
 
 # 5. 定義當使用者輸入 /start 指令時，機器人該如何回應
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """當使用者發送 /start 時，發送歡迎訊息"""
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
 # 6. 輔助函式：判斷訊息是否應該跳過翻譯
 def should_skip_translation(text: str) -> bool:
-    """
-    判斷訊息是否應該被跳過，不進行翻譯。
-    """
     ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
     if text.strip().lower() in ignored_words:
         return True
@@ -51,25 +45,23 @@ def should_skip_translation(text: str) -> bool:
         return False
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map symbols
-        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
         "\U00002702-\U000027B0"
         "\U000024C2-\U0001F251"
-        "\U0001f900-\U0001f9ff"  # supplemental symbols and pictographs
-        "\u2600-\u26FF"        # miscellaneous symbols
-        "\u2700-\u27BF"        # dingbats
+        "\U0001f900-\U0001f9ff"
+        "\u2600-\u26FF"
+        "\u2700-\u27BF"
         "]+", flags=re.UNICODE)
     text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
     if not text_without_emojis_and_space:
         return True
     return False
 
-
 # 7. 核心功能：定義處理所有文字訊息的翻譯功能 (偵錯版本)
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """接收使用者的訊息，並使用 Gemini AI 進行三向翻譯 (偵錯模式)"""
     user_text = update.message.text
     chat_id = update.message.chat_id
     
@@ -137,7 +129,6 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 # 8. 主程式：設定機器人並讓它開始運作
 def main() -> None:
-    """啟動機器人並開始監聽訊息"""
     if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
         print("!!!!!!!!!!!!!! 啟動失敗 !!!!!!!!!!!!!!")
         print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
@@ -162,17 +153,3 @@ def main() -> None:
 if __name__ == '__main__':
     keep_alive()
     main()
-
----
-
-### **下一步：請您執行並回報狀況**
-
-換上這份完整程式碼後，請**重新啟動**您的機器人。
-
-然後**最重要的**，請您：
-
-1.  **再次確認您的 `TELEGRAM_BOT_TOKEN` 和 `GEMINI_API_KEY` 環境變數都設定正確。**
-2.  傳送一個詞給機器人（例如「晚安」）。
-3.  **把您部署平台「主控台 (Console)」裡印出來的所有文字，完整地複製給我。**
-
-主控台的輸出是我們現在唯一能找出問題的線索，所以請務必將那些訊息提供給我。
