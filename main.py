@@ -40,7 +40,7 @@ def should_skip_translation(text: str) -> bool:
     判斷訊息是否應該被跳過，不進行翻譯。
     """
     # 建立一個不需翻譯的詞彙集合 (set)，查詢效能比 list 好
-    ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha"}
+    ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha","good"}
 
     # 1. 檢查是否為被忽略的詞彙 (不分大小寫)
     if text.strip().lower() in ignored_words:
