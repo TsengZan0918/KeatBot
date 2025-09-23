@@ -36,7 +36,7 @@ def keep_alive():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (正式版)
+# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (修正版)
 def should_skip_translation(text: str) -> bool:
     """
     判斷訊息是否應該被跳過，不進行翻譯。
@@ -46,28 +46,23 @@ def should_skip_translation(text: str) -> bool:
     if text.strip().lower() in ignored_words:
         return True
 
-    # 檢查是否只包含表情符號和空白字元
     if not text or text.isspace():
         return False
 
-    # 包含絕大多數 Unicode emoji 的正規表示式
+    # 修正版：使用更精準的 emoji 正規表示式，避免誤判中文字元
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map symbols
-        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001f900-\U0001f9ff"  # supplemental symbols and pictographs
-        "\u2600-\u26FF"        # miscellaneous symbols
-        "\u2700-\u27BF"        # dingbats
+        "\U0001F600-\U0001F64F"  # Emoticons
+        "\U0001F300-\U0001F5FF"  # Symbols & Pictographs
+        "\U0001F680-\U0001F6FF"  # Transport & Map Symbols
+        "\U0001F1E0-\U0001F1FF"  # Flags (iOS)
+        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        "\u2600-\u26FF"          # Miscellaneous Symbols
+        "\u2700-\u27BF"          # Dingbats
         "]+", flags=re.UNICODE)
 
-    # 移除所有 emoji 和空白字元
     text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
 
-    # 如果移除後字串為空，代表原文只包含 emoji，應該跳過
     if not text_without_emojis_and_space:
         return True
 
