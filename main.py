@@ -36,20 +36,41 @@ def keep_alive():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (極簡化偵錯版)
+# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (正式版)
 def should_skip_translation(text: str) -> bool:
-    # 為了找出問題，我們暫時只判斷英文單詞，完全移除複雜的表情符號檢查
-    print(">>> 進入 should_skip_translation 函式")
+    """
+    判斷訊息是否應該被跳過，不進行翻譯。
+    """
+    # 檢查是否為被忽略的詞彙 (不分大小寫)
     ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
-    
-    text_to_check = text.strip().lower()
-    print(f">>> 準備檢查文字: '{text_to_check}'")
-
-    if text_to_check in ignored_words:
-        print(f">>> '{text_to_check}' 在忽略清單中，回傳 True (將會跳過)")
+    if text.strip().lower() in ignored_words:
         return True
-    
-    print(f">>> '{text_to_check}' 不在忽略清單中，回傳 False (將會翻譯)")
+
+    # 檢查是否只包含表情符號和空白字元
+    if not text or text.isspace():
+        return False
+
+    # 包含絕大多數 Unicode emoji 的正規表示式
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001f900-\U0001f9ff"  # supplemental symbols and pictographs
+        "\u2600-\u26FF"        # miscellaneous symbols
+        "\u2700-\u27BF"        # dingbats
+        "]+", flags=re.UNICODE)
+
+    # 移除所有 emoji 和空白字元
+    text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
+
+    # 如果移除後字串為空，代表原文只包含 emoji，應該跳過
+    if not text_without_emojis_and_space:
+        return True
+
     return False
 
 # 7. 核心功能：定義處理所有文字訊息的翻譯功能
@@ -57,16 +78,10 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_text = update.message.text
     chat_id = update.message.chat_id
     
-    print(f"--- 收到新訊息 ---")
-    print(f"使用者 ({chat_id}) 傳送: {user_text}")
-
     if should_skip_translation(user_text):
-        print("判斷為無需翻譯的訊息，已跳過。")
         return
 
-    print("訊息需要翻譯，準備發送 '翻譯中...'")
     thinking_message = await context.bot.send_message(chat_id=chat_id, text='翻譯中，請稍候...')
-    print("'翻譯中...' 訊息已發送。")
 
     try:
         if not model:
@@ -102,39 +117,29 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         要翻譯的原文是："{user_text}"
         """
 
-        print("準備呼叫 Gemini API...")
         response = await model.generate_content_async(prompt)
-        print(f"Gemini 原始回覆: '{response.text}'")
         
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=thinking_message.message_id,
             text=response.text
         )
-        print("成功編輯訊息，顯示翻譯結果。")
 
     except Exception as e:
-        print("!!!!!!!!!!!!!! 發生嚴重錯誤 !!!!!!!!!!!!!!")
-        print(f"錯誤類型: {type(e).__name__}")
-        print(f"錯誤詳細資訊: {e}")
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        
-        error_message_to_user = f"抱歉，翻譯時發生了嚴重錯誤。\n\n[偵錯資訊]:\n{type(e).__name__}\n請檢查主控台(console)的詳細資訊。"
+        print(f"發生錯誤: {e}")
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=thinking_message.message_id,
-            text=error_message_to_user
+            text='抱歉，翻譯時發生了一點問題，請稍後再試。'
         )
 
 # 8. 主程式：設定機器人並讓它開始運作
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
-        print("!!!!!!!!!!!!!! 啟動失敗 !!!!!!!!!!!!!!")
         print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
         return
         
     if not model:
-        print("!!!!!!!!!!!!!! 啟動失敗 !!!!!!!!!!!!!!")
         print("錯誤：Gemini 模型初始化失敗，請檢查 GEMINI_API_KEY 是否有效。")
         return
 
