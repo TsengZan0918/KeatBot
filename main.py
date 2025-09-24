@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from flask import Flask
 from threading import Thread
+import html # 用於處理 HTML 字元實體
 
 # 2. 從環境變數讀取我們的祕密金鑰
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -36,7 +37,7 @@ def keep_alive():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# 6. 輔助函式：判斷訊息是否應該跳過翻譯 (修正版)
+# 6. 輔助函式：判斷訊息是否應該跳過翻譯
 def should_skip_translation(text: str) -> bool:
     """
     判斷訊息是否應該被跳過，不進行翻譯。
@@ -47,7 +48,7 @@ def should_skip_translation(text: str) -> bool:
         return True
 
     if not text or text.isspace():
-        return False
+        return True # 空訊息也跳過
 
     # 修正版：使用更精準的 emoji 正規表示式，避免誤判中文字元
     emoji_pattern = re.compile(
@@ -68,7 +69,7 @@ def should_skip_translation(text: str) -> bool:
 
     return False
 
-# 7. 核心功能：定義處理所有文字訊息的翻譯功能
+# 7. 核心功能：定義處理所有文字訊息的翻譯功能 (Prompt 強化版)
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
     chat_id = update.message.chat_id
@@ -82,42 +83,55 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
+        # --- 這部分是修改的核心 ---
+        # 我們給予 AI 更明確的步驟，先識別語言，再根據結果執行翻譯和排序
         prompt = f"""
-        你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的**專業同步口譯員**。
-        **你的唯一、且最重要的核心任務：**
-        精準傳達**說話者的原始意圖**。你的翻譯必須極度**忠實於原文的精確含義、語氣和所有細微差別**。
-        **執行流程：**
-        1.  **分析意圖**: 深度分析原文的精準意圖和語氣。
-        2.  **精準翻譯**: 將其完整意思翻譯成另外兩種語言。
-        3.  **排序**: 嚴格遵守下面的排序規則。
-        **翻譯與排序規則：**
-        - 如果原文主要是**繁體中文**，回覆必須是**第一行高棉文**，**第二行英文**。
-        - 如果原文主要是**高棉文**，回覆必須是**第一行繁體中文**，**第二行英文**。
-        - 如果原文主要是**英文**，回覆必須是**第一行繁體中文**，**第二行高棉文**。
-        **Emoji 規則：**
-        - **只有在**使用者的原文句末帶有 emoji 時，才可以在每一句翻譯結果的句末，附上**完全相同**的 emoji。
-        **強制執行規則：**
-        - **你必須永遠輸出兩行翻譯**。如果你因任何原因無法提供其中一種語言的翻譯，**絕不允許**默默地省略它。你必須在該行輸出 `[翻譯無法提供]` 的文字。
-        **絕對禁止**：
-        1.  禁止包含原文。
-        2.  禁止包含任何語言標籤 (例如 "英文:")。
-        3.  禁止任何除了翻譯文本和原文 emoji 之外的解釋或對話。
+        **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
+        **核心任務**: 你的唯一任務是精準傳達原文的意圖。翻譯必須忠實於原文的精確含義、語氣和所有細微差別。
+
+        **執行流程 (必須嚴格遵守):**
+        1.  **識別語言**: 首先，判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
+        2.  **應用規則**: 根據你識別出的語言，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
+            * **如果原文是 `繁體中文`**: 第一行輸出 `高棉文`，第二行輸出 `英文`。
+            * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
+            * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
+
+        **格式化規則 (必須嚴格遵守):**
+        * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
+        * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
+        * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
+        * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
+        * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
+
         ---
-        **範例:**
-        使用者輸入: "你好嗎？"
+        **範例 1:**
+        待翻譯原文: "你好嗎？"
         你的回覆:
         អ្នកសុខសប្បាយទេ?
         How are you?
         ---
-        要翻譯的原文是："{user_text}"
+        **範例 2:**
+        待翻譯原文: "Good morning! ☀️"
+        你的回覆:
+        早安！☀️
+        អរុណសួស្តី! ☀️
+        ---
+        **待翻譯原文**: "{user_text}"
         """
 
         response = await model.generate_content_async(prompt)
         
+        # 增加一個健全性檢查，確保 AI 有回傳內容
+        if not response.text or response.text.isspace():
+            raise ValueError("Gemini 模型返回了空的翻譯結果。")
+        
+        # Gemini 有時會輸出 Markdown，我們清理一下，並處理HTML實體
+        clean_text = html.unescape(response.text.strip())
+
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=thinking_message.message_id,
-            text=response.text
+            text=clean_text
         )
 
     except Exception as e:
