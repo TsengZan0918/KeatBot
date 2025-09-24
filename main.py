@@ -12,10 +12,11 @@ import html # 用於處理 HTML 字元實體
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-# 3. 設定 Gemini AI 模型
+# 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- 升級 #1: 使用更強大的 Pro 模型以提升翻譯品質 ---
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
 else:
     model = None
 
@@ -83,11 +84,10 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
-        # --- 這部分是修改的核心 ---
-        # 我們給予 AI 更明確的步驟，先識別語言，再根據結果執行翻譯和排序
         prompt = f"""
         **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
         **核心任務**: 你的唯一任務是精準傳達原文的意圖。翻譯必須忠實於原文的精確含義、語氣和所有細微差別。
+        **最高原則**: 準確性永遠高於流暢性。在忠於原文和使譯文聽起來更自然之間，永遠選擇前者。
 
         **執行流程 (必須嚴格遵守):**
         1.  **識別語言**: 首先，判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
@@ -118,8 +118,16 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         ---
         **待翻譯原文**: "{user_text}"
         """
+        
+        # --- 升級 #2: 設定低溫參數，讓翻譯更精準、更具確定性 ---
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.1
+        )
 
-        response = await model.generate_content_async(prompt)
+        response = await model.generate_content_async(
+            prompt,
+            generation_config=generation_config
+        )
         
         # 增加一個健全性檢查，確保 AI 有回傳內容
         if not response.text or response.text.isspace():
@@ -163,3 +171,4 @@ def main() -> None:
 if __name__ == '__main__':
     keep_alive()
     main()
+
