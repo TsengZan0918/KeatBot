@@ -99,8 +99,6 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
-        # --- 上下文升級 ---
-        # 1. 取得此對話的歷史紀錄
         history = chat_histories.get(chat_id, [])
         formatted_history = "\n".join(history)
         if not formatted_history:
@@ -109,12 +107,20 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         prompt = f"""
         **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
         **核心任務**: 你的唯一任務是精準傳達原文的意圖。翻譯必須忠實於原文的精確含義、語氣和所有細微差別。
-        **最高原則**: 準確性永遠高於流暢性。在忠於原文和使譯文聽起來更自然之間，永遠選擇前者。
+        **最高原則**: 準確性永遠高於流暢性。在忠於原文和使譯文聽起來更自然之間, 永遠選擇前者。
+
+        ---
+        **術語糾錯指南 (最優先規則，必須嚴格遵守):**
+        * **`ចុកពោះ` (chok puoh) 的唯一意思是「肚子痛」或「胃痛」。它絕對、永遠不代表「肚子餓」。**
+        * 柬埔寨文中，「肚子餓」的正確說法是 `ឃ្លាន` (khlean)。
+        * 在進行翻譯前，必須優先套用本指南中的所有修正。
+        ---
 
         **執行流程 (必須嚴格遵守):**
-        1.  **參考對話歷史**: 仔細閱讀下面的「對話歷史」，以理解當前對話的上下文、語氣和任何特定術語。
-        2.  **識別語言**: 判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
-        3.  **應用規則**: 根據你識別出的語言和對話上下文，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
+        1.  **應用術語指南**: 檢查原文是否包含上述術語，並強制使用正確的翻譯。
+        2.  **參考對話歷史**: 仔細閱讀下面的「對話歷史」，以理解當前對話的上下文、語氣。
+        3.  **識別語言**: 判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
+        4.  **應用規則**: 根據上述所有資訊，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
             * **如果原文是 `繁體中文`**: 第一行輸出 `高棉文`，第二行輸出 `英文`。
             * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
             * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
@@ -147,12 +153,9 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
         clean_text = html.unescape(response.text.strip())
 
-        # --- 上下文升級 ---
-        # 2. 更新歷史紀錄
         history.append(f"原文: {user_text}")
         history.append(f"譯文:\n{clean_text}")
         
-        # 3. 管理歷史紀錄大小 (保留最近 3 次對話，共 6 則訊息)
         if len(history) > 6:
             chat_histories[chat_id] = history[-6:]
         else:
