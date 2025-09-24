@@ -20,7 +20,7 @@ if GEMINI_API_KEY:
 else:
     model = None
 
-# 新增：建立一個全域變數來儲存每個對話的歷史紀錄
+# 建立一個全域變數來儲存每個對話的歷史紀錄
 chat_histories = {}
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
@@ -45,7 +45,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         '如果需要開始新的對話，請傳送 /clear 清除歷史紀錄。'
     )
 
-# 新增：定義 /clear 指令的功能
+# 定義 /clear 指令的功能
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     if chat_id in chat_histories:
@@ -56,36 +56,27 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # 6. 輔助函式：判斷訊息是否應該跳過翻譯
 def should_skip_translation(text: str) -> bool:
-    """
-    判斷訊息是否應該被跳過，不進行翻譯。
-    """
-    # 檢查是否為被忽略的詞彙 (不分大小寫)
     ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
     if text.strip().lower() in ignored_words:
         return True
 
     if not text or text.isspace():
-        return True # 空訊息也跳過
+        return True
 
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # Emoticons
-        "\U0001F300-\U0001F5FF"  # Symbols & Pictographs
-        "\U0001F680-\U0001F6FF"  # Transport & Map Symbols
-        "\U0001F1E0-\U0001F1FF"  # Flags (iOS)
-        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
-        "\u2600-\u26FF"          # Miscellaneous Symbols
-        "\u2700-\u27BF"          # Dingbats
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
+        "\U0001F900-\U0001F9FF"
+        "\u2600-\u26FF"
+        "\u2700-\u27BF"
         "]+", flags=re.UNICODE)
-
     text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
+    return not text_without_emojis_and_space
 
-    if not text_without_emojis_and_space:
-        return True
-
-    return False
-
-# 7. 核心功能：定義處理所有文字訊息的翻譯功能 (上下文強化版)
+# 7. 核心功能：定義處理所有文字訊息的翻譯功能
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
     chat_id = update.message.chat_id
@@ -100,9 +91,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
         history = chat_histories.get(chat_id, [])
-        formatted_history = "\n".join(history)
-        if not formatted_history:
-            formatted_history = "[無歷史紀錄]"
+        formatted_history = "\n".join(history) or "[無歷史紀錄]"
 
         prompt = f"""
         **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
@@ -139,14 +128,8 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         **待翻譯原文**: "{user_text}"
         """
         
-        generation_config = genai.types.GenerationConfig(
-            temperature=0.1
-        )
-
-        response = await model.generate_content_async(
-            prompt,
-            generation_config=generation_config
-        )
+        generation_config = genai.types.GenerationConfig(temperature=0.1)
+        response = await model.generate_content_async(prompt, generation_config=generation_config)
         
         if not response.text or response.text.isspace():
             raise ValueError("Gemini 模型返回了空的翻譯結果。")
@@ -156,10 +139,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         history.append(f"原文: {user_text}")
         history.append(f"譯文:\n{clean_text}")
         
-        if len(history) > 6:
-            chat_histories[chat_id] = history[-6:]
-        else:
-            chat_histories[chat_id] = history
+        chat_histories[chat_id] = history[-6:]
 
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -189,7 +169,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear_history)) # 新增 clear 指令
+    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, translate_message))
     
     print("機器人已上線，正在監聽...")
