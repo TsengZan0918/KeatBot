@@ -15,10 +15,13 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # --- 升級 #1: 使用更強大的 Pro 模型以提升翻譯品質 ---
+    # --- 使用更強大的 Pro 模型以提升翻譯品質 ---
     model = genai.GenerativeModel('gemini-1.5-pro-latest')
 else:
     model = None
+
+# 新增：建立一個全域變數來儲存每個對話的歷史紀錄
+chat_histories = {}
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
@@ -36,7 +39,20 @@ def keep_alive():
 
 # 5. 定義當使用者輸入 /start 指令時，機器人該如何回應
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
+    await update.message.reply_text(
+        '您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n'
+        '我會記住最近的對話以提升翻譯準確度。\n'
+        '如果需要開始新的對話，請傳送 /clear 清除歷史紀錄。'
+    )
+
+# 新增：定義 /clear 指令的功能
+async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    if chat_id in chat_histories:
+        del chat_histories[chat_id]
+        await update.message.reply_text('對話歷史已清除。')
+    else:
+        await update.message.reply_text('目前沒有對話歷史可供清除。')
 
 # 6. 輔助函式：判斷訊息是否應該跳過翻譯
 def should_skip_translation(text: str) -> bool:
@@ -51,7 +67,6 @@ def should_skip_translation(text: str) -> bool:
     if not text or text.isspace():
         return True # 空訊息也跳過
 
-    # 修正版：使用更精準的 emoji 正規表示式，避免誤判中文字元
     emoji_pattern = re.compile(
         "["
         "\U0001F600-\U0001F64F"  # Emoticons
@@ -70,7 +85,7 @@ def should_skip_translation(text: str) -> bool:
 
     return False
 
-# 7. 核心功能：定義處理所有文字訊息的翻譯功能 (Prompt 強化版)
+# 7. 核心功能：定義處理所有文字訊息的翻譯功能 (上下文強化版)
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
     chat_id = update.message.chat_id
@@ -84,14 +99,22 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
+        # --- 上下文升級 ---
+        # 1. 取得此對話的歷史紀錄
+        history = chat_histories.get(chat_id, [])
+        formatted_history = "\n".join(history)
+        if not formatted_history:
+            formatted_history = "[無歷史紀錄]"
+
         prompt = f"""
         **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
         **核心任務**: 你的唯一任務是精準傳達原文的意圖。翻譯必須忠實於原文的精確含義、語氣和所有細微差別。
         **最高原則**: 準確性永遠高於流暢性。在忠於原文和使譯文聽起來更自然之間，永遠選擇前者。
 
         **執行流程 (必須嚴格遵守):**
-        1.  **識別語言**: 首先，判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
-        2.  **應用規則**: 根據你識別出的語言，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
+        1.  **參考對話歷史**: 仔細閱讀下面的「對話歷史」，以理解當前對話的上下文、語氣和任何特定術語。
+        2.  **識別語言**: 判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
+        3.  **應用規則**: 根據你識別出的語言和對話上下文，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
             * **如果原文是 `繁體中文`**: 第一行輸出 `高棉文`，第二行輸出 `英文`。
             * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
             * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
@@ -104,22 +127,12 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
 
         ---
-        **範例 1:**
-        待翻譯原文: "你好嗎？"
-        你的回覆:
-        អ្នកសុខសប្បាយទេ?
-        How are you?
-        ---
-        **範例 2:**
-        待翻譯原文: "Good morning! ☀️"
-        你的回覆:
-        早安！☀️
-        អរុណសួស្តី! ☀️
+        **對話歷史 (用於提供上下文):**
+        {formatted_history}
         ---
         **待翻譯原文**: "{user_text}"
         """
         
-        # --- 升級 #2: 設定低溫參數，讓翻譯更精準、更具確定性 ---
         generation_config = genai.types.GenerationConfig(
             temperature=0.1
         )
@@ -129,12 +142,21 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             generation_config=generation_config
         )
         
-        # 增加一個健全性檢查，確保 AI 有回傳內容
         if not response.text or response.text.isspace():
             raise ValueError("Gemini 模型返回了空的翻譯結果。")
         
-        # Gemini 有時會輸出 Markdown，我們清理一下，並處理HTML實體
         clean_text = html.unescape(response.text.strip())
+
+        # --- 上下文升級 ---
+        # 2. 更新歷史紀錄
+        history.append(f"原文: {user_text}")
+        history.append(f"譯文:\n{clean_text}")
+        
+        # 3. 管理歷史紀錄大小 (保留最近 3 次對話，共 6 則訊息)
+        if len(history) > 6:
+            chat_histories[chat_id] = history[-6:]
+        else:
+            chat_histories[chat_id] = history
 
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -162,8 +184,11 @@ def main() -> None:
 
     print("機器人啟動中...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history)) # 新增 clear 指令
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, translate_message))
+    
     print("機器人已上線，正在監聽...")
     application.run_polling()
 
