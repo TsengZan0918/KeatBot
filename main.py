@@ -154,5 +154,36 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             text=clean_text
         )
 
-    except Exception
+    except Exception as e:
+        print(f"發生錯誤: {e}")
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=thinking_message.message_id,
+            text='抱歉，翻譯時發生了一點問題，請稍後再試。'
+        )
+
+# 8. 主程式：設定機器人並讓它開始運作
+def main() -> None:
+    if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
+        print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
+        return
+        
+    if not model:
+        print("錯誤：Gemini 模型初始化失敗，請檢查 GEMINI_API_KEY 是否有效。")
+        return
+
+    print("機器人啟動中...")
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, translate_message))
+    
+    print("機器人已上線，正在監聽...")
+    application.run_polling()
+
+# 9. 程式的進入點：先啟動小網站，再啟動機器人
+if __name__ == '__main__':
+    keep_alive()
+    main()
 
