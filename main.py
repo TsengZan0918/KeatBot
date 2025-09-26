@@ -15,8 +15,8 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # --- 修正 #2: 換回在您環境中確認可用的 gemini-1.5-flash 模型 ---
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- 修正 #2: 換回全球最穩定的 gemini-pro 模型 ---
+    model = genai.GenerativeModel('gemini-pro')
 else:
     model = None
 
