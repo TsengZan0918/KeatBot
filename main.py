@@ -6,22 +6,17 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from flask import Flask
 from threading import Thread
-import html # 用於處理 HTML 字元實體
 
 # 2. 從環境變數讀取我們的祕密金鑰
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-# 3. 設定 Gemini AI 模型 (升級版)
+# 3. 設定 Gemini AI 模型 (使用您最初的版本)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # --- 模型名稱修正：使用全球最穩定的 gemini-1.0-pro 模型 ---
-    model = genai.GenerativeModel('gemini-1.0-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     model = None
-
-# 建立一個全域變數來儲存每個對話的歷史紀錄
-chat_histories = {}
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
@@ -39,126 +34,39 @@ def keep_alive():
 
 # 5. 定義當使用者輸入 /start 指令時，機器人該如何回應
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        '您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n'
-        '我會記住最近的對話以提升翻譯準確度。\n'
-        '如果需要開始新的對話，請傳送 /clear 清除歷史紀錄。'
-    )
+    await update.message.reply_text('您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n請直接傳送任何這三種語言的句子給我。')
 
-# 定義 /clear 指令的功能
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.message.chat_id
-    if chat_id in chat_histories:
-        del chat_histories[chat_id]
-        await update.message.reply_text('對話歷史已清除。')
-    else:
-        await update.message.reply_text('目前沒有對話歷史可供清除。')
-
-# 6. 輔助函式：判斷訊息是否應該跳過翻譯
-def should_skip_translation(text: str) -> bool:
-    ignored_words = {"yes", "no", "ohh", "ok", "okey", "hmmm", "ha", "haha", "good"}
-    if text.strip().lower() in ignored_words:
-        return True
-
-    if not text or text.isspace():
-        return True
-
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U0001F900-\U0001F9FF"
-        "\u2600-\u26FF"
-        "\u2700-\u27BF"
-        "]+", flags=re.UNICODE)
-    text_without_emojis_and_space = emoji_pattern.sub('', text).strip()
-    return not text_without_emojis_and_space
-
-# 7. 核心功能：定義處理所有文字訊息的翻譯功能
+# 6. 核心功能：定義處理所有文字訊息的翻譯功能 (原始 Prompt)
 async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
     chat_id = update.message.chat_id
     
-    if should_skip_translation(user_text):
-        return
-
     thinking_message = await context.bot.send_message(chat_id=chat_id, text='翻譯中，請稍候...')
 
     try:
         if not model:
             raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
 
-        history = chat_histories.get(chat_id, [])
-        formatted_history = "\n".join(history) or "[無歷史紀錄]"
-
+        # 使用最原始、最簡單的 prompt 來進行測試
         prompt = f"""
-        **最高指令：忠實完整性 (ABSOLUTE COMMAND: Faithful Completeness)**
-        1.  **禁止省略**: 你的首要、且不可違背的指令是「完整翻譯」。原文中的每一個詞、片語、子句，無論看似多麼次要（例如 "我認為"、"我想"、"試試看"），都**必須**在兩種目標語言中得到對應的翻譯。
-        2.  **自我檢查**: 在輸出最終結果前，你必須在內心進行一次自我檢查：「我的譯文是否傳達了原文100%的資訊，還是我為了簡潔而丟失了某些部分？」如果答案是後者，你必須重做翻譯。絕不允許為了流暢而犧牲任何原文的細節。
+        你是一位專業的翻譯員，精通繁體中文、英文、柬埔寨高棉文。
+        請根據使用者輸入的語言，將其翻譯成另外兩種語言。
 
-        **身分**: 你是一位頂級的、精通繁體中文、英文、柬埔寨高棉文的專業同步口譯員。
-        **核心任務**: 你的唯一任務是精準傳達原文的意圖。翻譯必須忠實於原文的精確含義、語氣和所有細微差別。
-        **最高原則**: 準確性永遠高於流暢性。
+        - 如果原文是繁體中文，回覆高棉文和英文。
+        - 如果原文是高棉文，回覆繁體中文和英文。
+        - 如果原文是英文，回覆繁體中文和高棉文。
 
-        ---
-        **術語糾錯指南 (最優先規則，必須嚴格遵守):**
-        * **「我覺得」、「我認為」** 等開頭語，高棉文應翻譯為 **`ខ្ញុំគិតថា`** (khnhom kit tha)，絕不能省略。
-        * **`好/好的` 的情境翻譯**: 當中文的「好」或「好的」被用作單獨的回應、或表示同意一個指令或建議時，其英文應優先翻譯為 `OK` 或 `Alright`，而不是 `Good`。
-        * **`ចុកពោះ` (chok puoh)** 的唯一意思是「肚子痛」，絕不代表「肚子餓」。
-        * **「亡人節」** 的高棉文是 **`បុណ្យភ្ជុំបិណ្ឌ`** (Bon Pchum Ben)。
-        * **「鏡頭畫面」** 的高棉文是 **`រូបភាពកាមេរ៉ា`** (rup-pheap kamera)。
-        * **`ព្រឹកមិញ` (preuk minh)** 的意思是「今天早上」；**`ម្សិលមិញ` (msel minh)** 才是「昨天」。
-        * **「試試看」** 這類詞語，在高棉文中應翻譯為 **`សាកល្បង`** (sak l'bâng) 或 **`សាក`** (sak)，絕不能省略。
-        * 在進行翻譯前，必須優先套用本指南中的所有修正。
-        ---
-        **疑難詞彙處理原則 (重要規則):**
-        * 如果遇到本指南未包含的技術術語、專有名稱或俚語，**絕不輕易放棄翻譯**。
-        * 請依循以下策略處理：1. **嘗試进行描述性翻译** (解釋該詞彙的含義)。 2. 若無法描述，**嘗試使用音譯**。
-        * 只有在整個句子的核心意思完全無法傳達的極端情況下，才允許使用 `[翻譯無法提供]`。
-        ---
+        你的回覆只能有兩行翻譯文字，不要包含原文或任何語言標籤。
 
-        **執行流程 (必須嚴格遵守):**
-        1.  **遵循最高指令**: 絕對遵守「忠實完整性」原則。
-        2.  **應用術語指南與原則**: 檢查原文並強制使用正確的翻譯，同時遵循疑難詞彙處理原則。
-        3.  **參考對話歷史**: 仔細閱讀下面的「對話歷史」，以理解當前對話的上下文、語氣。
-        4.  **識別語言**: 判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
-        5.  **應用規則**: 根據上述所有資訊，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
-            * **如果原文是 `繁體中文`**: 第一行輸出 `高棉文`，第二行輸出 `英文`。
-            * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
-            * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
-        
-        **格式化規則 (必須嚴格遵守):**
-        * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
-        * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
-        * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
-        * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
-        * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
-        ---
-        **對話歷史 (用於提供上下文):**
-        {formatted_history}
-        ---
-        **待翻譯原文**: "{user_text}"
+        要翻譯的原文是："{user_text}"
         """
 
-        generation_config = genai.types.GenerationConfig(temperature=0.1)
-        response = await model.generate_content_async(prompt, generation_config=generation_config)
+        response = await model.generate_content_async(prompt)
         
-        if not response.text or response.text.isspace():
-            raise ValueError("Gemini 模型返回了空的翻譯結果。")
-        
-        clean_text = html.unescape(response.text.strip())
-
-        history.append(f"原文: {user_text}")
-        history.append(f"譯文:\n{clean_text}")
-        
-        chat_histories[chat_id] = history[-6:]
-
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=thinking_message.message_id,
-            text=clean_text
+            text=response.text
         )
 
     except Exception as e:
@@ -181,11 +89,8 @@ def main() -> None:
 
     print("機器人啟動中...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, translate_message))
-    
     print("機器人已上線，正在監聽...")
     application.run_polling()
 
