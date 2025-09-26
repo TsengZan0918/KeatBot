@@ -1,7 +1,7 @@
 # 1. 匯入所有需要的工具
 import os
 import re
-import html # <--- 修正 #1: 補上這個遺失的匯入
+import html
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -15,8 +15,8 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # --- 修正 #2: 換回全球最穩定的 gemini-pro 模型 ---
-    model = genai.GenerativeModel('gemini-pro')
+    # --- 模型已換回 gemini-1.5-pro ---
+    model = genai.GenerativeModel('gemini-1.5-pro')
 else:
     model = None
 
@@ -92,7 +92,6 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         history = chat_histories.get(chat_id, [])
         formatted_history = "\n".join(history) or "[無歷史紀錄]"
 
-        # --- 修正 #3: 將重複的 prompt 內容合併，讓程式碼更簡潔 ---
         prompt = f"""
         **最高指令：忠實完整性 (ABSOLUTE COMMAND: Faithful Completeness)**
         1.  **禁止省略**: 你的首要、且不可違背的指令是「完整翻譯」。原文中的每一個詞、片語、子句，無論看似多麼次要（例如 "我認為"、"我想"、"試試看"），都**必須**在兩種目標語言中得到對應的翻譯。
