@@ -15,8 +15,8 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # --- 模型已換回 gemini-1.5-pro ---
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    # --- 模型已換回在您環境中確認可用的 gemini-1.5-flash ---
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     model = None
 
@@ -128,7 +128,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
             * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
         
-        **格式化規則 (必須嚴格遵守):**
+        **格式化規則 (必須嚴గ遵守):**
         * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
         * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
         * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
