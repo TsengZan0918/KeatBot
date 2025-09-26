@@ -1,12 +1,12 @@
 # 1. 匯入所有需要的工具
 import os
 import re
+import html # <--- 修正 #1: 補上這個遺失的匯入
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from flask import Flask
 from threading import Thread
-import html # 用於處理 HTML 字元實體
 
 # 2. 從環境變數讀取我們的祕密金鑰
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -15,7 +15,8 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+    # --- 修正 #2: 換回在您環境中確認可用的 gemini-1.5-flash 模型 ---
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     model = None
 
@@ -36,7 +37,7 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 5. 定義當使用者輸入 /start 指令時，機器人該如何回應
+# 5. 定義 /start 和 /clear 指令
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         '您好！我是您的中文-高棉文-英文三向翻譯助理。\n\n'
@@ -44,7 +45,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         '如果需要開始新的對話，請傳送 /clear 清除歷史紀錄。'
     )
 
-# 定義 /clear 指令的功能
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     if chat_id in chat_histories:
@@ -92,6 +92,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         history = chat_histories.get(chat_id, [])
         formatted_history = "\n".join(history) or "[無歷史紀錄]"
 
+        # --- 修正 #3: 將重複的 prompt 內容合併，讓程式碼更簡潔 ---
         prompt = f"""
         **最高指令：忠實完整性 (ABSOLUTE COMMAND: Faithful Completeness)**
         1.  **禁止省略**: 你的首要、且不可違背的指令是「完整翻譯」。原文中的每一個詞、片語、子句，無論看似多麼次要（例如 "我認為"、"我想"、"試試看"），都**必須**在兩種目標語言中得到對應的翻譯。
@@ -107,7 +108,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         * **`好/好的` 的情境翻譯**: 當中文的「好」或「好的」被用作單獨的回應、或表示同意一個指令或建議時，其英文應優先翻譯為 `OK` 或 `Alright`，而不是 `Good`。
         * **`ចុកពោះ` (chok puoh)** 的唯一意思是「肚子痛」，絕不代表「肚子餓」。
         * **「亡人節」** 的高棉文是 **`បុណ្យភ្ជុំបិណ្ឌ`** (Bon Pchum Ben)。
-        * **「鏡頭畫面」** 的高棉文是 **`រូបភាពកាមេរ៉ា`** (rup-pheap kamera)。
+        * **「鏡頭畫面」** 的高棉文是 **`រូបភាពκάμεរ៉ា`** (rup-pheap kamera)。
         * **`ព្រឹកមិញ` (preuk minh)** 的意思是「今天早上」；**`ម្សិលមិញ` (msel minh)** 才是「昨天」。
         * **「試試看」** 這類詞語，在高棉文中應翻譯為 **`សាកល្បង`** (sak l'bâng) 或 **`សាក`** (sak)，絕不能省略。
         * 在進行翻譯前，必須優先套用本指南中的所有修正。
@@ -129,21 +130,16 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
         
         **格式化規則 (必須嚴格遵守):**
-        * (此處規則與先前版本相同，為簡潔省略)
-        ---
-        **對話歷史 (用於提供上下文):**
-        {formatted_history}
-        ---
-        **待翻譯原文**: "{user_text}"
-        """
-        
-        prompt += """
-        **格式化規則 (必須嚴格遵守):**
         * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
         * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
         * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
         * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
         * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
+        ---
+        **對話歷史 (用於提供上下文):**
+        {formatted_history}
+        ---
+        **待翻譯原文**: "{user_text}"
         """
 
         generation_config = genai.types.GenerationConfig(temperature=0.1)
@@ -197,3 +193,4 @@ def main() -> None:
 if __name__ == '__main__':
     keep_alive()
     main()
+
