@@ -15,8 +15,7 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # 3. 設定 Gemini AI 模型 (升級版)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # 使用全球穩定可用的 gemini-1.5-flash 模型
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-pro-latest')
 else:
     model = None
 
@@ -130,16 +129,21 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
         
         **格式化規則 (必須嚴格遵守):**
-        * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
-        * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
-        * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
-        * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
-        * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
+        * (此處規則與先前版本相同，為簡潔省略)
         ---
         **對話歷史 (用於提供上下文):**
         {formatted_history}
         ---
         **待翻譯原文**: "{user_text}"
+        """
+        
+        prompt += """
+        **格式化規則 (必須嚴格遵守):**
+        * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
+        * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
+        * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
+        * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
+        * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
         """
 
         generation_config = genai.types.GenerationConfig(temperature=0.1)
@@ -193,4 +197,3 @@ def main() -> None:
 if __name__ == '__main__':
     keep_alive()
     main()
-
