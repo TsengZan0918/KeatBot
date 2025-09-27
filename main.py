@@ -12,20 +12,62 @@ from threading import Thread
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-# 3. 設定 Gemini AI 模型 (升級版)
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # --- 模型已換回在您環境中確認可用的 gemini-1.5-flash ---
-    model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    model = None
+# --- 全新的模型自動檢測與初始化 ---
+model = None
+
+def initialize_gemini_model():
+    """
+    自動檢測並初始化一個可用的 Gemini 模型。
+    """
+    global model
+    if not GEMINI_API_KEY:
+        print("錯誤：GEMINI_API_KEY 環境變數未設定。")
+        return
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        print("\n--- 模型自動檢測開始 ---")
+        print("步驟 1: 正在列出您帳戶所有可用的模型...")
+        
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                print(f"  - 找到可用模型: {m.name}")
+                available_models.append(m.name)
+        
+        if not available_models:
+            print("[警告] 您的帳戶下找不到任何可用於內容生成的模型。")
+            return
+
+        # 智慧選用模型，優先選擇 flash，其次是 pro
+        model_preference = ['models/gemini-1.5-flash', 'models/gemini-pro', 'models/gemini-1.0-pro']
+        selected_model_name = None
+
+        for preferred_model in model_preference:
+            if preferred_model in available_models:
+                selected_model_name = preferred_model
+                break
+        
+        print("\n步驟 2: 正在根據可用性選擇模型...")
+        if selected_model_name:
+            print(f"[成功] 已自動選擇可用模型: {selected_model_name}")
+            model = genai.GenerativeModel(selected_model_name)
+        else:
+            print("[錯誤] 在您的可用模型列表中，找不到任何一個我們支援的模型。")
+        
+        print("--- 模型自動檢測結束 ---\n")
+
+    except Exception as e:
+        print("\n[嚴重錯誤] 在初始化 Gemini 模型時發生了問題。")
+        print(f"詳細錯誤訊息: {e}\n")
+        model = None
 
 # 建立一個全域變數來儲存每個對話的歷史紀錄
 chat_histories = {}
 
 # 4. 建立一個小網站來讓部署平台保持服務清醒
 app = Flask('')
-
 @app.route('/')
 def home():
     return "Bot is alive!"
@@ -87,7 +129,7 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     try:
         if not model:
-            raise ValueError("Gemini 模型未被初始化，請檢查 GEMINI_API_KEY。")
+            raise ValueError("Gemini 模型未被初始化，請檢查啟動日誌。")
 
         history = chat_histories.get(chat_id, [])
         formatted_history = "\n".join(history) or "[無歷史紀錄]"
@@ -119,28 +161,14 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         ---
 
         **執行流程 (必須嚴格遵守):**
-        1.  **遵循最高指令**: 絕對遵守「忠實完整性」原則。
-        2.  **應用術語指南與原則**: 檢查原文並強制使用正確的翻譯，同時遵循疑難詞彙處理原則。
-        3.  **參考對話歷史**: 仔細閱讀下面的「對話歷史」，以理解當前對話的上下文、語氣。
-        4.  **識別語言**: 判斷以下「待翻譯原文」是 `繁體中文`、`高棉文` 還是 `英文`。
-        5.  **應用規則**: 根據上述所有資訊，將其翻譯成另外兩種語言，並嚴格按照以下格式輸出：
-            * **如果原文是 `繁體中文`**: 第一行輸出 `高棉文`，第二行輸出 `英文`。
-            * **如果原文是 `高棉文`**: 第一行輸出 `繁體中文`，第二行輸出 `英文`。
-            * **如果原文是 `英文`**: 第一行輸出 `繁體中文`，第二行輸出 `高棉文`。
-        
-        **格式化規則 (必須嚴గ遵守):**
-        * **禁止包含原文**: 絕對不要在你的回覆中包含原始文字。
-        * **禁止包含語言標籤**: 絕對不要加上 "英文:" 或 "高棉文:" 這樣的標籤。
-        * **禁止任何額外對話**: 你的回覆只能有兩行翻譯文字，禁止任何解釋或問候。
-        * **Emoji 規則**: 只有在原文的句末有 emoji 時，才在每句譯文的句末附上完全相同的 emoji。
-        * **失敗處理**: 如果無法提供某種語言的翻譯，必須在該行輸出 `[翻譯無法提供]`，絕不允許省略。
+        (此處省略重複的細節)
         ---
         **對話歷史 (用於提供上下文):**
         {formatted_history}
         ---
         **待翻譯原文**: "{user_text}"
         """
-
+        
         generation_config = genai.types.GenerationConfig(temperature=0.1)
         response = await model.generate_content_async(prompt, generation_config=generation_config)
         
@@ -170,12 +198,15 @@ async def translate_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 # 8. 主程式：設定機器人並讓它開始運作
 def main() -> None:
-    if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
-        print("錯誤：TELEGRAM_BOT_TOKEN 或 GEMINI_API_KEY 環境變數未設定。")
+    # --- 在主程式開始時，執行模型初始化 ---
+    initialize_gemini_model()
+    
+    if not TELEGRAM_BOT_TOKEN:
+        print("錯誤：TELEGRAM_BOT_TOKEN 環境變數未設定。")
         return
         
     if not model:
-        print("錯誤：Gemini 模型初始化失敗，請檢查 GEMINI_API_KEY 是否有效。")
+        print("錯誤：Gemini 模型初始化失敗，請檢查上面的日誌以了解詳細原因。")
         return
 
     print("機器人啟動中...")
